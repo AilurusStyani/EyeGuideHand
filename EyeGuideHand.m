@@ -199,23 +199,14 @@ function pushbutton2_Callback(hObject, eventdata, handles)
 if handles.logBox.Value == 0
     set(handles.logBox,'String','You need to calibrate first','ForegroundColor','r');
 elseif handles.logBox.Value == 1
-    screenIndex = (Screen('Screens'));
-    if length(screenIndex) > 1
-        screenId = max(screenIndex)-1;
-    else
-        screenId = max(screenIndex);
-    end
-    [widthPix,heightPix] = Screen('WindowSize',screenId);
-    
-%     % fot testing without eyelink
-%         screenPix = get(0,'ScreenSize');
-%         widthPix = screenPix(3);
-%         heightPix = screenPix(4);
+        screenPix = get(0,'ScreenSize');
+        widthPix = screenPix(3);
+        heightPix = screenPix(4);
     
     while true
         checkLog = get(handles.logBox,'Value');
         if checkLog == 0
-            return
+            return % terminate the while loop when calibration
         end
         evt = Eyelink( 'NewestFloatSample');
         eyeUsed = Eyelink('EyeAvailable'); % get eye that's tracked
@@ -225,8 +216,8 @@ elseif handles.logBox.Value == 1
         end
         
 %         % fot testing without eyelink
-%                 pt = get(handles.axes1,'CurrentPoint');
-%                 px = pt(1,1)*2;py = pt(1,2)*2;
+%                 pt = get(0,'PointerLocation');
+%                 px = pt(1);py = heightPix-pt(2);
         
         eyePointer = annotation('ellipse','Units','pixels','Position',[px, heightPix-py, 5, 5],'color','yellow','LineWidth',4);
         pause(0.05);
