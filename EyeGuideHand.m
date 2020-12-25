@@ -63,13 +63,13 @@ hImage = image(zeros(objRes(2), objRes(1), nBands));
 preview(obj, hImage);
 axis off
 
-annotation('textbox',[0 0 .2 .2],'EdgeColor','r','String','FuncLB','HorizontalAlignment','right','VerticalAlignment','top');
+annotation('textbox',[0 0 .2 .2],'EdgeColor','r','String','FuncLB','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','top');
 
-annotation('textbox',[0 .8 .2 1],'EdgeColor','r','String','FuncLT','HorizontalAlignment','right','VerticalAlignment','bottom');
+annotation('textbox',[0 .8 .2 1],'EdgeColor','r','String','FuncLT','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','bottom');
 
-annotation('textbox',[.8 .8 1 1],'EdgeColor','r','String','FuncRT','HorizontalAlignment','left','VerticalAlignment','bottom');
+annotation('textbox',[.8 .8 1 1],'EdgeColor','r','String','FuncRT','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','bottom');
 
-annotation('textbox',[.8 0 1 .2],'EdgeColor','r','String','FuncRB','HorizontalAlignment','left','VerticalAlignment','top');
+annotation('textbox',[.8 0 1 .2],'EdgeColor','r','String','FuncRB','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','top');
 
 % Choose default command line output for EyeGuideHand
 handles.output = hObject;
@@ -193,6 +193,9 @@ end
 
 
 function pushbutton2_Callback(hObject, eventdata, handles)
+% fot testing without eyelink
+% set(handles.logBox,'Value',1);
+
 if handles.logBox.Value == 0
     set(handles.logBox,'String','You need to calibrate first','ForegroundColor','r');
 elseif handles.logBox.Value == 1
@@ -204,13 +207,14 @@ elseif handles.logBox.Value == 1
     end
     [widthPix,heightPix] = Screen('WindowSize',screenId);
     
-    % fot test without eyelink
-    %     screenPix = get(0,'ScreenSize');
-    %     widthPix = screenPix(3);
-    %     heightPix = screenPix(4);
+%     % fot testing without eyelink
+%         screenPix = get(0,'ScreenSize');
+%         widthPix = screenPix(3);
+%         heightPix = screenPix(4);
     
     while true
-        if handles.logBox.Value == 0
+        checkLog = get(handles.logBox,'Value');
+        if checkLog == 0
             return
         end
         evt = Eyelink( 'NewestFloatSample');
@@ -220,9 +224,9 @@ elseif handles.logBox.Value == 1
             py = evt.gy(eyeUsed+1);
         end
         
-        % fot test without eyelink
-        %         pt = get(handles.axes1,'CurrentPoint');
-        %         px = pt(1,1)*2;py = pt(1,2)*2;
+%         % fot testing without eyelink
+%                 pt = get(handles.axes1,'CurrentPoint');
+%                 px = pt(1,1)*2;py = pt(1,2)*2;
         
         eyePointer = annotation('ellipse','Units','pixels','Position',[px, heightPix-py, 5, 5],'color','yellow','LineWidth',4);
         pause(0.05);
@@ -270,6 +274,7 @@ elseif handles.logBox.Value == 1
                 clear LTtime LBtime RTtime;
             end
         else
+            set(handles.logBox,'String','Idle','ForegroundColor','k');
             clear LTtime LBtime RTtime RBtime;
         end
         
@@ -277,19 +282,19 @@ elseif handles.logBox.Value == 1
             switch runFunction
                 case 1
                     % function left - top
-                    set(handles.logBox,'String','blah','ForegroundColor','k');
+                    set(handles.logBox,'String','blah LT','ForegroundColor','k');
                     
                 case 2
                     % function left - bottom
-                    set(handles.logBox,'String','blah','ForegroundColor','k');
+                    set(handles.logBox,'String','blah LB','ForegroundColor','k');
                     
                 case 3
                     % function right - top
-                    set(handles.logBox,'String','blah','ForegroundColor','k');
+                    set(handles.logBox,'String','blah RT','ForegroundColor','k');
                     
                 case 4
                     % function right - bottom
-                    set(handles.logBox,'String','blah','ForegroundColor','k');
+                    set(handles.logBox,'String','blah RB','ForegroundColor','k');
                     
             end
             clear runFunction
