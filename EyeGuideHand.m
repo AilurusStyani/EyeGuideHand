@@ -89,8 +89,11 @@ function varargout = EyeGuideHand_OutputFcn(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % maximize the window
+set(hObject,'resize','on');
 javaFrame = get(gcf,'JavaFrame');
 set(javaFrame,'Maximized',1);
+pause(0.5);
+set(hObject,'resize','off');
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 end
