@@ -22,7 +22,7 @@ function varargout = EyeGuideHand(varargin)
 
 % Edit the above text to modify the response to help EyeGuideHand
 
-% Last Modified by GUIDE v2.5 24-Dec-2020 19:11:15
+% Last Modified by GUIDE v2.5 28-Jan-2021 14:01:31
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -63,13 +63,21 @@ hImage = image(zeros(objRes(2), objRes(1), nBands));
 preview(obj, hImage);
 axis off
 
-annotation('textbox',[0 0 .2 .2],'EdgeColor','r','String','FuncLB','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','top');
+annotation('textbox',[.0 .0 .2 .2],'EdgeColor','r','String','FuncLB','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','top');
 
-annotation('textbox',[0 .8 .2 1],'EdgeColor','r','String','FuncLT','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','bottom');
+annotation('textbox',[.0 .4 .2 .2],'EdgeColor','r','String','FuncLeft','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','middle');
 
-annotation('textbox',[.8 .8 1 1],'EdgeColor','r','String','FuncRT','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','bottom');
+annotation('textbox',[.0 .8 .2 .2],'EdgeColor','r','String','FuncLT','color','yellow','FontSize',20,'HorizontalAlignment','right','VerticalAlignment','bottom');
 
-annotation('textbox',[.8 0 1 .2],'EdgeColor','r','String','FuncRB','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','top');
+annotation('textbox',[.4 .8 .2 .2],'EdgeColor','r','String','FuncTop','color','yellow','FontSize',20,'HorizontalAlignment','center','VerticalAlignment','bottom');
+
+annotation('textbox',[.4 .0 .2 .2],'EdgeColor','r','String','FuncBottom','color','yellow','FontSize',20,'HorizontalAlignment','center','VerticalAlignment','top');
+
+annotation('textbox',[.8 .8 .2 .2],'EdgeColor','r','String','FuncRT','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','bottom');
+
+annotation('textbox',[.8 .4 .2 .2],'EdgeColor','r','String','FuncRight','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','middle');
+
+annotation('textbox',[.8 .0 .2 .2],'EdgeColor','r','String','FuncRB','color','yellow','FontSize',20,'HorizontalAlignment','left','VerticalAlignment','top');
 
 % Choose default command line output for EyeGuideHand
 handles.output = hObject;
@@ -98,7 +106,7 @@ set(hObject,'resize','off');
 varargout{1} = handles.output;
 end
 
-function pushbutton1_Callback(hObject, eventdata, handles)
+function calibrateBtn_Callback(hObject, eventdata, handles)
 set(handles.logBox,'Value',0);
 
 AssertOpenGL;
@@ -195,10 +203,23 @@ set(handles.logBox,'String','Calibration Succeed','ForegroundColor','g','Value',
 end
 
 
-function pushbutton2_Callback(hObject, eventdata, handles)
+function startBtn_Callback(hObject, eventdata, handles)
 % fot testing without eyelink
 % set(handles.logBox,'Value',1);
-
+global robot
+set(handles.calibrateBtn,'value',1-handles.calibrateBtn.Value);
+if ~handles.calibrateBtn.Value
+    set(handles.startBtn,'String','Start');
+    return;
+else
+    set(handles.startBtn,'String','Stop');
+end
+if ~exist('robotOpen','var')
+    robot=serial("COM6","Baudrate",115200);
+    robotOpen = true;
+    fopen(robot);
+end
+idle = tic;
 if handles.logBox.Value == 0
     set(handles.logBox,'String','You need to calibrate first','ForegroundColor','r');
 elseif handles.logBox.Value == 1
@@ -207,6 +228,10 @@ elseif handles.logBox.Value == 1
         heightPix = screenPix(4);
     
     while true
+        if ~handles.calibrateBtn.Value
+            fclose(robot);
+            return;
+        end
         checkLog = get(handles.logBox,'Value');
         if checkLog == 0
             return % terminate the while loop when calibration
@@ -226,71 +251,133 @@ elseif handles.logBox.Value == 1
         pause(0.05);
         delete(eyePointer);
         
-        inLT = inpolygon(px,py,[0 0 .2 .2]*widthPix,[.2 0 0 .2]*heightPix);
-        inLB = inpolygon(px,py,[0 0 .2 .2]*widthPix,[1 .8 .8 1]*heightPix);
-        inRT = inpolygon(px,py,[.8 .8 1 1]*widthPix,[.2 0 0 .2]*heightPix);
-        inRB = inpolygon(px,py,[.8 .8 1 1]*widthPix,[1 .8 .8 1]*heightPix);
-        
-        if inLT
-            if exist('LTtime','var')
-                if toc(LTtime) > 0.2
-                    runFunction = 1;
+        if toc(idle) > 2
+            inLT     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.0 .2 .2 .0]*heightPix);
+            inLB     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.8 1. 1. .8]*heightPix);
+            inRT     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.0 .2 .2 .0]*heightPix);
+            inRB     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.8 1. 1. .8]*heightPix);
+            inRight  = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.4 .6 .6 .4]*heightPix);
+            inLeft   = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.4 .6 .6 .4]*heightPix);
+            inBottom = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.8 1. 1. .8]*heightPix);
+            inTop    = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.0 .2 .2 .0]*heightPix);
+            
+            if inLT
+                if exist('LTtime','var')
+                    if toc(LTtime) > 0.2
+                        runFunction = 1;
+                    end
+                else
+                    LTtime = tic;
+                    clear LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
+                end
+            elseif inLB
+                if exist('LBtime','var')
+                    if toc(LBtime) > 0.2
+                        runFunction = 7;
+                    end
+                else
+                    LBtime = tic;
+                    clear LTtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
+                end
+            elseif inRT
+                if exist('RTtime','var')
+                    if toc(RTtime) > 0.2
+                        runFunction = 3;
+                    end
+                else
+                    RTtime = tic;
+                    clear LTtime LBtime RBtime Righttime LeftTime Toptime Bottomtime;
+                end
+            elseif inRB
+                if exist('RBtime','var')
+                    if toc(RBtime) > 0.2
+                        runFunction = 9;
+                    end
+                else
+                    RBtime = tic;
+                    clear LTtime LBtime RTtime Righttime LeftTime Toptime Bottomtime;
+                end
+            elseif inRight
+                if exist('Righttime','var')
+                    if toc(Righttime) > 0.2
+                        runFunction = 6;
+                    end
+                else
+                    Righttime = tic;
+                    clear LTtime LBtime RTtime RBtime LeftTime Toptime Bottomtime;
+                end
+            elseif inLeft
+                if exist('Lefttime','var')
+                    if toc(Lefttime) > 0.2
+                        runFunction = 4;
+                    end
+                else
+                    Lefttime = tic;
+                    clear LTtime LBtime RTtime RBtime Righttime Toptime Bottomtime;
+                end
+            elseif inTop
+                if exist('Toptime','var')
+                    if toc(Toptime) > 0.2
+                        runFunction = 2;
+                    end
+                else
+                    Toptime = tic;
+                    clear LTtime LBtime RTtime RBtime Righttime LeftTime Bottomtime;
+                end
+            elseif inBottom
+                if exist('Bottomtime','var')
+                    if toc(Bottomtime) > 0.2
+                        runFunction = 8;
+                    end
+                else
+                    Bottomtime = tic;
+                    clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime;
                 end
             else
-                LTtime = tic;
-                clear LBtime RTtime RBtime;
+                set(handles.logBox,'String','Idle','ForegroundColor','k');
+                clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
             end
-        elseif inLB
-            if exist('LBtime','var')
-                if toc(LBtime) > 0.2
-                    runFunction = 2;
-                end
-            else
-                LBtime = tic;
-                clear LTtime RTtime RBtime;
-            end
-        elseif inRT
-            if exist('RTtime','var')
-                if toc(RTtime) > 0.2
-                    runFunction = 3;
-                end
-            else
-                RTtime = tic;
-                clear LTtime LBtime RBtime;
-            end
-        elseif inRB
-            if exist('RBtime','var')
-                if toc(RBtime) > 0.2
-                    runFunction = 4;
-                end
-            else
-                RBtime = tic;
-                clear LTtime LBtime RTtime;
-            end
-        else
-            set(handles.logBox,'String','Idle','ForegroundColor','k');
-            clear LTtime LBtime RTtime RBtime;
         end
         
         if exist('runFunction','var')
             switch runFunction
                 case 1
-                    % function left - top
-                    set(handles.logBox,'String','blah LT','ForegroundColor','k');
-                    
+                    % function Left - top
+                    set(handles.logBox,'String','sight move to the Left-Top','ForegroundColor','k');
+                    fprintf(robot,"%c",1);
                 case 2
-                    % function left - bottom
-                    set(handles.logBox,'String','blah LB','ForegroundColor','k');
-                    
+                    % function Top
+                    set(handles.logBox,'String','sight move to the Top','ForegroundColor','k');
+                    fprintf(robot,"%c",2)
                 case 3
-                    % function right - top
-                    set(handles.logBox,'String','blah RT','ForegroundColor','k');
-                    
+                    % function Right - top
+                    set(handles.logBox,'String','sight move to the Right-Top','ForegroundColor','k');
+                    fprintf(robot,"%c",3)
                 case 4
-                    % function right - bottom
-                    set(handles.logBox,'String','blah RB','ForegroundColor','k');
+                    % function Left
+                    set(handles.logBox,'String','sight move to the Left','ForegroundColor','k');
+                    fprintf(robot,"%c",4)
+                case 5
+                    % function Left
                     
+                case 6
+                    % function Right
+                    set(handles.logBox,'String','sight move to the Right','ForegroundColor','k');
+                    fprintf(robot,"%c",6)
+                case 7
+                    % function Left-bottom
+                    set(handles.logBox,'String','sight move to the Left-Bottom','ForegroundColor','k');
+                    fprintf(robot,"%c",7)
+                case 8
+                    % function Bottom
+                    set(handles.logBox,'String','sight move to the Bottom','ForegroundColor','k');
+                    fprintf(robot,"%c",8)
+                case 9
+                    % function Right-bottom
+                    set(handles.logBox,'String','sight move to the Right-Bottom','ForegroundColor','k');
+                    fprintf(robot,"%c",9)
             end
+            idle = tic;
             clear runFunction
         end
     end
@@ -299,12 +386,16 @@ end
 
 
 function pushbutton3_Callback(hObject, eventdata, handles)
+global robot
 if handles.logBox.Value == 1
     try
         Eyelink('StopRecording');
         Eyelink('CloseFile');
         Eyelink('ShutDown');
         set(handles.logBox,'String','Eyelink was closed.','ForegroundColor','k');
+        if exist('robotOpen','var')
+            fclose(robot);
+        end
         pause(1);
     catch
         set(handles.logBox,'String','Try to close Eyelink but failed.','ForegroundColor','r');
