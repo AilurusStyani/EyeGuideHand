@@ -22,7 +22,7 @@ function varargout = EyeGuideHand(varargin)
 
 % Edit the above text to modify the response to help EyeGuideHand
 
-% Last Modified by GUIDE v2.5 28-Jan-2021 14:01:31
+% Last Modified by GUIDE v2.5 25-Feb-2021 11:15:49
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -107,7 +107,17 @@ varargout{1} = handles.output;
 end
 
 function calibrateBtn_Callback(hObject, eventdata, handles)
-set(handles.logBox,'Value',0);
+set(handles.calibrateCheck,'Value',0);
+try
+    eyelinkCheck = Eyelink('IsConnected');
+    if ~eyelinkCheck
+        set(handles.logBox,'String','Eyelink is not connected.','ForegroundColor','r');
+    end
+    return
+catch
+    set(handles.logBox,'String','Eyelink is not avaliable, maybe not installed at all.','ForegroundColor','r');
+    return
+end
 
 AssertOpenGL;
 InitializeMatlabOpenGL;
@@ -138,7 +148,8 @@ try
     el.calibrationtargetcolour = GrayIndex(el.window);
 catch
     Screen('CloseAll');
-    set(handles.logBox,'String','Calibration Failed','ForegroundColor','r','Value',0);
+    set(handles.logBox,'String','Calibration Failed','ForegroundColor','r');
+    set(handles.calibrateCheck,'Value',0);
     return
 end
 
@@ -191,7 +202,7 @@ if(errorCheck~=0)
     return
 end
 
-% wait a little bit, in case the key press during calibration influence the following keyboard check
+% check weather the keyboard is released
 while 1
     [ keyDown, ~, ~] = KbCheck;
     if ~keyDown
@@ -199,190 +210,256 @@ while 1
     end
 end
 Screen('CloseAll');
-set(handles.logBox,'String','Calibration Succeed','ForegroundColor','g','Value',1);
+set(handles.logBox,'String','Calibration Succeed','ForegroundColor','g');
+set(handles.calibrateCheck,'Value',1);
 end
-
 
 function startBtn_Callback(hObject, eventdata, handles)
-% fot testing without eyelink
-% set(handles.logBox,'Value',1);
 global robot
-set(handles.calibrateBtn,'value',1-handles.calibrateBtn.Value);
-if ~handles.calibrateBtn.Value
+if ~handles.calibrateCheck.Value
+    set(handles.logBox,'String','You need to calibrate first','ForegroundColor','r');
+    return
+end
+if handles.startCheck.Value
+    set(handles.startCheck,'Value',0);
     set(handles.startBtn,'String','Start');
+    if exist('robot','var') && ~strcmp(robot.Status,'closed')
+        fclose(robot);
+    end
     return;
 else
+    set(handles.startCheck,'Value',1);
     set(handles.startBtn,'String','Stop');
 end
-if ~exist('robotOpen','var')
-    robot=serial("COM6","Baudrate",115200);
-    robotOpen = true;
-    fopen(robot);
-end
 idle = tic;
-if handles.logBox.Value == 0
-    set(handles.logBox,'String','You need to calibrate first','ForegroundColor','r');
-elseif handles.logBox.Value == 1
-        screenPix = get(0,'ScreenSize');
-        widthPix = screenPix(3);
-        heightPix = screenPix(4);
-    
-    while true
-        if ~handles.calibrateBtn.Value
+
+screenPix = get(0,'ScreenSize');
+widthPix = screenPix(3);
+heightPix = screenPix(4);
+
+try
+    robot=serial("COM6","Baudrate",115200);
+    if ~strcmp(robot.Status,'closed')
+        fopen(robot);
+    end
+catch
+    set(handles.logBox,'String','Arduinoio is not avaliable, maybe not connect to this COM port.','ForegroundColor','r');
+    set(handles.startCheck,'Value',0);
+    set(handles.startBtn,'String','Start');
+    return
+end
+
+% check for eyelink and test mode
+
+try
+    eyelinkCheck = Eyelink('IsConnected');
+    if ~eyelinkCheck
+        set(handles.logBox,'String','Eyelink is not connected.','ForegroundColor','r');
+        if exist('robot','var') && ~strcmp(robot.Status,'closed')
             fclose(robot);
-            return;
         end
-        checkLog = get(handles.logBox,'Value');
-        if checkLog == 0
-            return % terminate the while loop when calibration
+        set(handles.startCheck,'Value',0);
+        set(handles.startBtn,'String','Start');
+        return;
+    end
+    testMode = false;
+catch
+    set(handles.logBox,'String','Eyelink is not avaliable, maybe not installed at all. Press any key in 2 seconds to operate in test mode.','ForegroundColor','r');
+    pause(0.01);
+    tic;
+    testMode = false;
+    while toc<2
+        [ keyDown, ~, ~] = KbCheck;
+        if keyDown % press any key to operate in test mode
+            testMode = true;
+            break;
         end
+    end
+    if ~testMode
+        if exist('robot','var') && ~strcmp(robot.Status,'closed')
+            fclose(robot);
+        end
+        set(handles.startCheck,'Value',0);
+        set(handles.startBtn,'String','Start');
+        return;
+    end
+end
+
+while true
+    % check for stop and calibration
+    if ~handles.startCheck.Value || ~handles.calibrateCheck.Value
+        if exist('robot','var') && ~strcmp(robot.Status,'closed')
+            fclose(robot);
+        end
+        set(handles.startCheck,'Value',0);
+        set(handles.startBtn,'String','Start');
+        return;
+    end
+
+    if testMode
+        % fot testing without eyelink
+        pt = get(0,'PointerLocation');
+        px = pt(1);py = heightPix-pt(2);
+    else
         evt = Eyelink( 'NewestFloatSample');
         eyeUsed = Eyelink('EyeAvailable'); % get eye that's tracked
         if eyeUsed ~= -1
             px =evt.gx(eyeUsed+1); % +1 as we're accessing MATLAB array
             py = evt.gy(eyeUsed+1);
         end
+    end
+    eyePointer = annotation('ellipse','Units','pixels','Position',[px, heightPix-py, 5, 5],'color','yellow','LineWidth',4);
+    
+    if toc(idle) > 2
+        inLT     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.0 .2 .2 .0]*heightPix);
+        inLB     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.8 1. 1. .8]*heightPix);
+        inRT     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.0 .2 .2 .0]*heightPix);
+        inRB     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.8 1. 1. .8]*heightPix);
+        inRight  = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.4 .6 .6 .4]*heightPix);
+        inLeft   = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.4 .6 .6 .4]*heightPix);
+        inBottom = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.8 1. 1. .8]*heightPix);
+        inTop    = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.0 .2 .2 .0]*heightPix);
         
-%         % fot testing without eyelink
-%                 pt = get(0,'PointerLocation');
-%                 px = pt(1);py = heightPix-pt(2);
-        
-        eyePointer = annotation('ellipse','Units','pixels','Position',[px, heightPix-py, 5, 5],'color','yellow','LineWidth',4);
-        pause(0.05);
-        delete(eyePointer);
-        
-        if toc(idle) > 2
-            inLT     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.0 .2 .2 .0]*heightPix);
-            inLB     = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.8 1. 1. .8]*heightPix);
-            inRT     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.0 .2 .2 .0]*heightPix);
-            inRB     = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.8 1. 1. .8]*heightPix);
-            inRight  = inpolygon(px,py,[.8 .8 1. 1.]*widthPix,[.4 .6 .6 .4]*heightPix);
-            inLeft   = inpolygon(px,py,[.0 .0 .2 .2]*widthPix,[.4 .6 .6 .4]*heightPix);
-            inBottom = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.8 1. 1. .8]*heightPix);
-            inTop    = inpolygon(px,py,[.4 .4 .6 .6]*widthPix,[.0 .2 .2 .0]*heightPix);
-            
-            if inLT
-                if exist('LTtime','var')
-                    if toc(LTtime) > 0.2
-                        runFunction = 1;
-                    end
-                else
-                    LTtime = tic;
-                    clear LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
-                end
-            elseif inLB
-                if exist('LBtime','var')
-                    if toc(LBtime) > 0.2
-                        runFunction = 7;
-                    end
-                else
-                    LBtime = tic;
-                    clear LTtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
-                end
-            elseif inRT
-                if exist('RTtime','var')
-                    if toc(RTtime) > 0.2
-                        runFunction = 3;
-                    end
-                else
-                    RTtime = tic;
-                    clear LTtime LBtime RBtime Righttime LeftTime Toptime Bottomtime;
-                end
-            elseif inRB
-                if exist('RBtime','var')
-                    if toc(RBtime) > 0.2
-                        runFunction = 9;
-                    end
-                else
-                    RBtime = tic;
-                    clear LTtime LBtime RTtime Righttime LeftTime Toptime Bottomtime;
-                end
-            elseif inRight
-                if exist('Righttime','var')
-                    if toc(Righttime) > 0.2
-                        runFunction = 6;
-                    end
-                else
-                    Righttime = tic;
-                    clear LTtime LBtime RTtime RBtime LeftTime Toptime Bottomtime;
-                end
-            elseif inLeft
-                if exist('Lefttime','var')
-                    if toc(Lefttime) > 0.2
-                        runFunction = 4;
-                    end
-                else
-                    Lefttime = tic;
-                    clear LTtime LBtime RTtime RBtime Righttime Toptime Bottomtime;
-                end
-            elseif inTop
-                if exist('Toptime','var')
-                    if toc(Toptime) > 0.2
-                        runFunction = 2;
-                    end
-                else
-                    Toptime = tic;
-                    clear LTtime LBtime RTtime RBtime Righttime LeftTime Bottomtime;
-                end
-            elseif inBottom
-                if exist('Bottomtime','var')
-                    if toc(Bottomtime) > 0.2
-                        runFunction = 8;
-                    end
-                else
-                    Bottomtime = tic;
-                    clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime;
+        if inLT
+            if exist('LTtime','var')
+                if toc(LTtime) > 0.2
+                    runFunction = 1;
                 end
             else
-                set(handles.logBox,'String','Idle','ForegroundColor','k');
-                clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
+                LTtime = tic;
+                clear LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
             end
-        end
-        
-        if exist('runFunction','var')
-            switch runFunction
-                case 1
-                    % function Left - top
-                    set(handles.logBox,'String','sight move to the Left-Top','ForegroundColor','k');
-                    fprintf(robot,"%c",1);
-                case 2
-                    % function Top
-                    set(handles.logBox,'String','sight move to the Top','ForegroundColor','k');
-                    fprintf(robot,"%c",2)
-                case 3
-                    % function Right - top
-                    set(handles.logBox,'String','sight move to the Right-Top','ForegroundColor','k');
-                    fprintf(robot,"%c",3)
-                case 4
-                    % function Left
-                    set(handles.logBox,'String','sight move to the Left','ForegroundColor','k');
-                    fprintf(robot,"%c",4)
-                case 5
-                    % function Left
-                    
-                case 6
-                    % function Right
-                    set(handles.logBox,'String','sight move to the Right','ForegroundColor','k');
-                    fprintf(robot,"%c",6)
-                case 7
-                    % function Left-bottom
-                    set(handles.logBox,'String','sight move to the Left-Bottom','ForegroundColor','k');
-                    fprintf(robot,"%c",7)
-                case 8
-                    % function Bottom
-                    set(handles.logBox,'String','sight move to the Bottom','ForegroundColor','k');
-                    fprintf(robot,"%c",8)
-                case 9
-                    % function Right-bottom
-                    set(handles.logBox,'String','sight move to the Right-Bottom','ForegroundColor','k');
-                    fprintf(robot,"%c",9)
+        elseif inLB
+            if exist('LBtime','var')
+                if toc(LBtime) > 0.2
+                    runFunction = 7;
+                end
+            else
+                LBtime = tic;
+                clear LTtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
             end
-            idle = tic;
-            clear runFunction
+        elseif inRT
+            if exist('RTtime','var')
+                if toc(RTtime) > 0.2
+                    runFunction = 3;
+                end
+            else
+                RTtime = tic;
+                clear LTtime LBtime RBtime Righttime LeftTime Toptime Bottomtime;
+            end
+        elseif inRB
+            if exist('RBtime','var')
+                if toc(RBtime) > 0.2
+                    runFunction = 9;
+                end
+            else
+                RBtime = tic;
+                clear LTtime LBtime RTtime Righttime LeftTime Toptime Bottomtime;
+            end
+        elseif inRight
+            if exist('Righttime','var')
+                if toc(Righttime) > 0.2
+                    runFunction = 6;
+                end
+            else
+                Righttime = tic;
+                clear LTtime LBtime RTtime RBtime LeftTime Toptime Bottomtime;
+            end
+        elseif inLeft
+            if exist('Lefttime','var')
+                if toc(Lefttime) > 0.2
+                    runFunction = 4;
+                end
+            else
+                Lefttime = tic;
+                clear LTtime LBtime RTtime RBtime Righttime Toptime Bottomtime;
+            end
+        elseif inTop
+            if exist('Toptime','var')
+                if toc(Toptime) > 0.2
+                    runFunction = 2;
+                end
+            else
+                Toptime = tic;
+                clear LTtime LBtime RTtime RBtime Righttime LeftTime Bottomtime;
+            end
+        elseif inBottom
+            if exist('Bottomtime','var')
+                if toc(Bottomtime) > 0.2
+                    runFunction = 8;
+                end
+            else
+                Bottomtime = tic;
+                clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime;
+            end
+        else
+            set(handles.logBox,'String','Idle','ForegroundColor','k');
+            clear LTtime LBtime RTtime RBtime Righttime LeftTime Toptime Bottomtime;
         end
     end
+    
+    if exist('runFunction','var')
+        switch runFunction
+            case 1
+                % function Left - top
+                set(handles.logBox,'String','sight move to the Left-Top','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",1);
+                end
+            case 2
+                % function Top
+                set(handles.logBox,'String','sight move to the Top','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",2);
+                end
+            case 3
+                % function Right - top
+                set(handles.logBox,'String','sight move to the Right-Top','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",3);
+                end
+            case 4
+                % function Left
+                set(handles.logBox,'String','sight move to the Left','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",4);
+                end
+            case 5
+                % function Left
+                
+            case 6
+                % function Right
+                set(handles.logBox,'String','sight move to the Right','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",6);
+                end
+            case 7
+                % function Left-bottom
+                set(handles.logBox,'String','sight move to the Left-Bottom','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",7);
+                end
+            case 8
+                % function Bottom
+                set(handles.logBox,'String','sight move to the Bottom','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",8);
+                end
+            case 9
+                % function Right-bottom
+                set(handles.logBox,'String','sight move to the Right-Bottom','ForegroundColor','k');
+                if exist('robot','var') && ~strcmp(robot.Status,'closed')
+                    fprintf(robot,"%c",9);
+                end
+        end
+        idle = tic;
+        clear runFunction
+    end
+    pause(0.05);
+    delete(eyePointer);
 end
 end
+
 
 
 function pushbutton3_Callback(hObject, eventdata, handles)
@@ -393,7 +470,7 @@ if handles.logBox.Value == 1
         Eyelink('CloseFile');
         Eyelink('ShutDown');
         set(handles.logBox,'String','Eyelink was closed.','ForegroundColor','k');
-        if exist('robotOpen','var')
+        if exist('robot','var') && ~strcmp(robot.Status,'closed')
             fclose(robot);
         end
         pause(1);
@@ -405,4 +482,10 @@ end
 msgbox('See you next time!');
 pause(1);
 close all;
+end
+
+function calibrateCheck_Callback(hObject, eventdata, handles)
+end
+
+function startCheck_Callback(hObject, eventdata, handles)
 end
