@@ -110,7 +110,7 @@ function calibrateBtn_Callback(hObject, eventdata, handles)
 set(handles.calibrateCheck,'Value',0);
 try
     eyelinkCheck = Eyelink('IsConnected');
-    if ~eyelinkCheck
+    if eyelinkCheck~=2
         set(handles.logBox,'String','Eyelink is not connected.','ForegroundColor','r');
     end
     return
@@ -253,7 +253,7 @@ end
 
 try
     eyelinkCheck = Eyelink('IsConnected');
-    if ~eyelinkCheck
+    if eyelinkCheck~=2
         set(handles.logBox,'String','Eyelink is not connected.','ForegroundColor','r');
         if exist('robot','var') && ~strcmp(robot.Status,'closed')
             fclose(robot);
